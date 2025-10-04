@@ -1,14 +1,20 @@
-// main.js (ESM) — fenêtre fixe + navigation entre index.html / interface.html
+// main.js (ESM) — NPCForge Installer
+// Indentation: tabulations
 
 import { app, BrowserWindow, Menu, globalShortcut, ipcMain } from "electron"
 import { fileURLToPath } from "url"
 import { dirname, join } from "path"
+
+// modules internes
+import { registerDockerHandlers } from "./dockerInstaller.js"
+import { registerReleaseHandlers } from "./releaseManager.js"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 let win = null
 
+// lock: une seule instance
 const gotLock = app.requestSingleInstanceLock()
 if (!gotLock) {
 	app.quit()
@@ -31,17 +37,25 @@ async function createWindow() {
 		autoHideMenuBar: true,
 		webPreferences: {
 			contextIsolation: true,
-			sandbox: true,
+			sandbox: false, // nécessaire si preload.cjs utilise require()
 			nodeIntegration: false,
 			spellcheck: false,
-			preload: join(__dirname, "preload.cjs") // ← au lieu de preload.js
+			preload: join(__dirname, "preload.cjs")
 		}
 	})
 
 	Menu.setApplicationMenu(null)
 	win.setMenuBarVisibility(false)
 
-	await win.loadFile(join(__dirname, "index.html"))
+	win.webContents.on("did-fail-load", (_e, code, desc, url) => {
+		console.error(`[electron] did-fail-load ${code} ${desc} -> ${url}`)
+	})
+
+	try {
+		await win.loadFile(join(__dirname, "index.html"))
+	} catch (err) {
+		console.error("[electron] loadFile(index.html) failed:", err)
+	}
 
 	win.once("ready-to-show", () => win?.show())
 
@@ -61,6 +75,11 @@ function registerShortcuts() {
 }
 
 app.whenReady().then(() => {
+	// Enregistrer les handlers spécialisés
+	registerDockerHandlers()
+	registerReleaseHandlers()
+
+	// Créer la fenêtre principale
 	createWindow()
 	registerShortcuts()
 })
@@ -75,16 +94,23 @@ app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") app.quit()
 })
 
-// ---- Navigation dans la même fenêtre
+// ---- Navigation entre pages dans la même fenêtre
 ipcMain.handle("navigate", async (event, page) => {
 	const w = BrowserWindow.fromWebContents(event.sender)
 	if (!w) return
 
-	if (page === "index") {
-		await w.loadFile(join(__dirname, "index.html"))
-	} else if (page === "interface") {
-		await w.loadFile(join(__dirname, "interface.html"))
-	} else {
+	try {
+		if (page === "index") {
+			return w.loadFile(join(__dirname, "index.html"))
+		}
+		if (page === "interface") {
+			return w.loadFile(join(__dirname, "interface.html"))
+		}
+		if (page === "launch") {
+			return w.loadFile(join(__dirname, "launch.html"))
+		}
 		throw new Error(`Page inconnue: ${page}`)
+	} catch (err) {
+		console.error("[electron] Navigation error:", err)
 	}
 })

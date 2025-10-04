@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="fr">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>NPCForge — Launcher</title>
+	<meta http-equiv="Content-Security-Policy"
+		  content="default-src 'self' https://cdn.jsdelivr.net;
+				   script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
+				   style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
+				   img-src 'self' data:;">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark text-light">
+	<div class="container py-4" style="max-width:800px;">
+		<h1 class="mb-3">🎮 NPCForge — Launcher</h1>
+		<div class="d-flex gap-2 mb-4">
+			<button id="btn-api-up" class="btn btn-success">API: docker compose up -d</button>
+			<button id="btn-game-run" class="btn btn-primary">Lancer le Jeu</button>
+			<button id="btn-back" class="btn btn-outline-light">← Installation</button>
+		</div>
+		<pre id="log" class="bg-black p-3" style="min-height:240px;border:1px solid #333;"></pre>
+	</div>
+
+	<script>
+		const logEl = document.getElementById("log")
+		const log = (m)=> logEl.textContent += (m+"\n")
+
+		document.getElementById("btn-api-up").onclick = async () => {
+			const r = await window.launcher.apiComposeUp()
+			log(JSON.stringify(r,null,2))
+		}
+		document.getElementById("btn-game-run").onclick = async () => {
+			const r = await window.launcher.gameRun()
+			log(JSON.stringify(r,null,2))
+		}
+		document.getElementById("btn-back").onclick = () => window.launcher.navigate("index")
+	</script>
+</body>
+</html>
