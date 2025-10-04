@@ -1,0 +1,29 @@
+{
+	"name": "project-launcher",
+	"version": "0.1.0",
+	"main": "main.js",
+	"scripts": {
+		"start": "electron .",
+		"dist:win": "electron-builder --win nsis"
+	},
+	"build": {
+		"appId": "com.yourorg.projectlauncher",
+		"files": ["main.js","preload.js","index.html"],
+		"extraResources": [
+			{ "from": "scripts/install-linux.sh", "to": "scripts/install-linux.sh" }
+		],
+		"nsis": {
+			"oneClick": true,
+			"perMachine": true,
+			"allowElevation": true,
+			"allowToChangeInstallationDirectory": false
+		}
+	},
+	"dependencies": {
+		"electron": "^32.0.0",
+		"sudo-prompt": "^9.2.1"
+	},
+	"devDependencies": {
+		"electron-builder": "^24.13.3"
+	}
+}
