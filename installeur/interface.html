@@ -60,7 +60,22 @@
 				<div id="s2-status" class="step-status text-warning">En attente…</div>
 			</div>
 			<div class="card-body">
-				<small class="mono text-secondary d-block mb-2">Téléchargement, .env, docker compose up -d</small>
+				<!-- Clé API GPT -->
+				<div class="mb-3" id="key-block">
+					<label for="gpt-key" class="form-label">Clé API GPT <span class="text-secondary">(obligatoire)</span></label>
+					<div class="input-group">
+						<input id="gpt-key" type="password" class="form-control" autocomplete="off" placeholder="sk-..." />
+						<button id="toggle-key" type="button" class="btn btn-outline-secondary">Afficher</button>
+						<button id="save-key" type="button" class="btn btn-primary">Enregistrer</button>
+						<button id="edit-key" type="button" class="btn btn-outline-warning d-none">Modifier</button>
+					</div>
+					<div id="gpt-key-hint" class="form-text text-secondary">
+						Stockée localement (keystore). Injectée dans <code>CHATGPT_TOKEN</code> du fichier <code>.env</code> de l’API.
+					</div>
+					<div id="gpt-key-msg" class="small mt-1"></div>
+				</div>
+
+				<small class="mono text-secondary d-block mb-2">Téléchargement, génération du .env, docker compose up -d</small>
 				<div class="progress"><div id="s2-bar" class="progress-bar progress-bar-striped" style="width:0%"></div></div>
 				<div id="s2-log" class="mt-2 small text-secondary"></div>
 			</div>
@@ -97,8 +112,86 @@
 		const s2={status:document.getElementById("s2-status"), bar:document.getElementById("s2-bar"), log:document.getElementById("s2-log")}
 		const s3={status:document.getElementById("s3-status"), bar:document.getElementById("s3-bar"), log:document.getElementById("s3-log")}
 
+		// champs clé API
+		const keyInput = document.getElementById("gpt-key")
+		const keyToggle = document.getElementById("toggle-key")
+		const keySaveBtn = document.getElementById("save-key")
+		const keyEditBtn = document.getElementById("edit-key")
+		const keyMsg = document.getElementById("gpt-key-msg")
+
+		function showKeyMsg(txt, type="secondary"){
+			keyMsg.className = `small mt-1 text-${type}`
+			keyMsg.textContent = txt
+		}
+		function isLikelyOpenAIKey(v){
+			return typeof v === "string" && v.trim().length >= 20 && /^sk-[A-Za-z0-9-_]{10,}/.test(v.trim())
+		}
+		function maskKey(v){
+			if (!v) return ""
+			const t = v.trim()
+			if (t.length <= 8) return "••••"
+			return `${t.slice(0,4)}••••••••${t.slice(-4)}`
+		}
+		function setKeyReadOnlyMode(val){
+			keyInput.value = val ? maskKey(val) : ""
+			keyInput.type = "password"
+			keyInput.disabled = true
+			keyToggle.classList.add("d-none")
+			keySaveBtn.classList.add("d-none")
+			keyEditBtn.classList.remove("d-none")
+			showKeyMsg("Clé détectée (stockée localement).", "success")
+		}
+		function setKeyEditMode(){
+			keyInput.value = ""
+			keyInput.type = "password"
+			keyInput.disabled = false
+			keyToggle.classList.remove("d-none")
+			keySaveBtn.classList.remove("d-none")
+			keyEditBtn.classList.add("d-none")
+			showKeyMsg("Entrez une nouvelle clé puis enregistrez.", "secondary")
+		}
+
+		// Pré-remplir si la clé existe déjà
+		;(async () => {
+			try {
+				const existing = await window.launcher.getEnv("CHATGPT_TOKEN")
+				if (existing) {
+					setKeyReadOnlyMode(existing)
+				} else {
+					setKeyEditMode()
+				}
+			} catch {
+				setKeyEditMode()
+			}
+		})()
+
+		keyToggle?.addEventListener("click", ()=>{
+			const isPw = keyInput.type === "password"
+			keyInput.type = isPw ? "text" : "password"
+			keyToggle.textContent = isPw ? "Masquer" : "Afficher"
+		})
+		keySaveBtn?.addEventListener("click", async ()=>{
+			const val = keyInput.value.trim()
+			if (!val){
+				showKeyMsg("Veuillez entrer une clé (ex: sk-...)", "warning")
+				return
+			}
+			if (!isLikelyOpenAIKey(val)){
+				showKeyMsg("Format inhabituel. Vérifiez que la clé est correcte (ex: sk-...).", "warning")
+			}else{
+				showKeyMsg("Clé valide, enregistrement…", "secondary")
+			}
+			try{
+				await window.launcher.setEnv({ CHATGPT_TOKEN: val })
+				setKeyReadOnlyMode(val)
+			}catch(e){
+				showKeyMsg(`Erreur d’enregistrement: ${e?.message||e}`, "danger")
+			}
+		})
+		keyEditBtn?.addEventListener("click", () => setKeyEditMode())
+
 		// écouter les progress du main (downloads)
-		window.launcher.onProgress?.((p)=>{
+		window.launcher?.onProgress?.((p)=>{
 			if(p.step==="api-download"){
 				setStatus(s2.status,"Téléchargement de l’API…","text-warning")
 				const pct = p.total? Math.min(99, Math.floor((p.received/p.total)*90)+10) : 50
@@ -122,12 +215,11 @@
 				log(s1.log, `<span class="text-warning">•</span> Absent: ${c?.error||"non détecté"}`)
 			}catch(e){ log(s1.log, `<span class="text-danger">✖</span> ${e?.message||e}`)}
 
-			// installer
 			setStatus(s1.status,"Installation Docker…","text-warning"); setBar(s1.bar,40,true,true)
 			await window.launcher.installDocker().catch(e=>log(s1.log, `<span class="text-danger">✖</span> ${e?.message||e}`))
 			setStatus(s1.status,"Attente que Docker soit prêt…","text-warning"); setBar(s1.bar,60,true,true)
 
-			for(let i=0;i<120;i++){ // ~10 min
+			for(let i=0;i<120;i++){
 				await sleep(5000)
 				try{
 					const c=await window.launcher.checkDocker()
@@ -137,13 +229,35 @@
 			setStatus(s1.status,"Timeout Docker","text-danger"); setBar(s1.bar,95,false,true); return false
 		}
 
+		async function hasApiKey(){
+			try{
+				return await window.launcher.hasEnvKey("CHATGPT_TOKEN")
+			}catch{ return false }
+		}
+
 		async function installAPI() {
 			setStatus(s2.status,"Préparation…","text-warning"); setBar(s2.bar,5,true,true)
+
+			// Vérifier la présence d'une clé API avant de lancer compose
 			try{
-				const info = await window.launcher.apiDownloadLatest()
+				const haveKey = await hasApiKey()
+				if (!haveKey){
+					setStatus(s2.status,"Clé API manquante","text-danger"); setBar(s2.bar,15,false,true)
+					log(s2.log, `<span class="text-danger">✖</span> Aucune clé <code>CHATGPT_TOKEN</code> configurée. Entrez votre clé puis cliquez “Enregistrer”.`)
+					return false
+				}
+			}catch(e){
+				log(s2.log, `<span class="text-warning">•</span> Impossible de vérifier la clé: ${e?.message||e}`)
+			}
+
+			try{
+				// Utilise le cache si tag identique
+				const info = await window.launcher.apiDownloadLatest({ force:false })
 				log(s2.log, `<span class="text-success">✔</span> Release: ${info.name||info.tag}`)
 				log(s2.log, `<span class="text-secondary">→</span> Dossier: ${info.destDir}`)
 				if(info.envPath){ log(s2.log, `<span class="text-secondary">→</span> .env: ${info.envPath}`) }
+				if(info.cacheHit){ log(s2.log, `<span class="text-secondary">→</span> Cache utilisé (aucun re-téléchargement)`) }
+
 				setStatus(s2.status,"Démarrage docker compose…","text-warning"); setBar(s2.bar,92,true,true)
 				const up = await window.launcher.apiComposeUp()
 				if(!up.ok){
@@ -164,7 +278,7 @@
 			try{
 				const g = await window.launcher.gameDownload()
 				log(s3.log, `<span class="text-success">✔</span> Release: ${g.name||g.tag}`)
-				log(s3.log, `<span class="text-secondary">→</span> Fichier: ${g.destFile}`)
+				log(s3.log, `<span class="text-secondary">→</span> Dossier: ${g.destDir || '—'}`)
 				setBar(s3.bar,100,false,false); setStatus(s3.status,"Jeu prêt","text-success")
 				return true
 			}catch(e){
@@ -183,10 +297,13 @@
 			if (!ok3) { startBtn.disabled = false; return }
 			startBtn.disabled = false
 			launcherBtn.classList.remove("d-none")
+
+			// Auto-redirection vers le launcher
+			setTimeout(()=> window.launcher.navigate("launch"), 800)
 		}
 
 		startBtn.addEventListener("click", runAll)
-		launcherBtn.addEventListener("click", ()=> window.launcher.navigate("interface"))
+		launcherBtn.addEventListener("click", ()=> window.launcher.navigate("launch"))
 	</script>
 </body>
 </html>

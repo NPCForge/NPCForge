@@ -14,27 +14,63 @@
 <body class="bg-dark text-light">
 	<div class="container py-4" style="max-width:800px;">
 		<h1 class="mb-3">🎮 NPCForge — Launcher</h1>
-		<div class="d-flex gap-2 mb-4">
+
+		<div class="mb-3">
+			<div class="small text-secondary">État clé GPT :</div>
+			<div id="key-state" class="badge bg-secondary">Vérification…</div>
+		</div>
+
+		<div class="d-flex flex-wrap gap-2 mb-4">
 			<button id="btn-api-up" class="btn btn-success">API: docker compose up -d</button>
 			<button id="btn-game-run" class="btn btn-primary">Lancer le Jeu</button>
 			<button id="btn-back" class="btn btn-outline-light">← Installation</button>
+			<button id="btn-refresh" class="btn btn-outline-secondary ms-auto">Actualiser</button>
 		</div>
-		<pre id="log" class="bg-black p-3" style="min-height:240px;border:1px solid #333;"></pre>
+
+		<pre id="log" class="bg-black p-3" style="min-height:240px;border:1px solid #333; white-space:pre-wrap;"></pre>
 	</div>
 
 	<script>
 		const logEl = document.getElementById("log")
-		const log = (m)=> logEl.textContent += (m+"\n")
+		const log = (m)=> { logEl.textContent += (m + "\n") }
+
+		async function refreshKeyState() {
+			try {
+				const key = await window.launcher.getEnv("CHATGPT_TOKEN")
+				const badge = document.getElementById("key-state")
+				if (key) {
+					const masked = key.length > 8 ? (key.slice(0,4) + "••••••••" + key.slice(-4)) : "••••"
+					badge.className = "badge bg-success"
+					badge.textContent = `Clé détectée: ${masked}`
+				} else {
+					badge.className = "badge bg-warning text-dark"
+					badge.textContent = "Clé absente — retournez sur Installation pour l’ajouter"
+				}
+			} catch (e) {
+				const badge = document.getElementById("key-state")
+				badge.className = "badge bg-danger"
+				badge.textContent = "Erreur de lecture"
+				log("[error] " + (e?.message || e))
+			}
+		}
 
 		document.getElementById("btn-api-up").onclick = async () => {
 			const r = await window.launcher.apiComposeUp()
-			log(JSON.stringify(r,null,2))
+			log("== docker compose up ==")
+			log(JSON.stringify(r, null, 2))
 		}
+
 		document.getElementById("btn-game-run").onclick = async () => {
 			const r = await window.launcher.gameRun()
-			log(JSON.stringify(r,null,2))
+			log("== run game ==")
+			log(JSON.stringify(r, null, 2))
 		}
-		document.getElementById("btn-back").onclick = () => window.launcher.navigate("index")
+
+		document.getElementById("btn-back").onclick = () => window.launcher.navigate("interface")
+		document.getElementById("btn-refresh").onclick = () => refreshKeyState()
+
+		// init
+		refreshKeyState()
 	</script>
 </body>
 </html>

@@ -5,18 +5,53 @@ import os from "os"
 import path from "path"
 import fs from "fs"
 
-export function registerDockerHandlers() {
-	// Vérifier si docker est installé
-	ipcMain.handle("check-docker", async () => {
-		return new Promise((resolve) => {
-			exec("docker --version", (err, stdout, stderr) => {
-				if (err) return resolve({ installed: false, error: (stderr || err.message).trim() })
-				resolve({ installed: true, version: stdout.trim() })
-			})
+// --- Vérifie si docker est installé + lancé
+async function checkDockerStatus() {
+	return new Promise((resolve) => {
+		exec("docker info", (err, stdout, stderr) => {
+			if (err) {
+				// Cas 1 : Docker non installé
+				if (stderr.includes("not found") || err.message.includes("not recognized")) {
+					return resolve({ installed: false, running: false })
+				}
+				// Cas 2 : installé mais daemon arrêté
+				return resolve({ installed: true, running: false })
+			}
+			resolve({ installed: true, running: true, info: stdout.trim() })
 		})
 	})
+}
 
-	// Installer docker selon l'OS
+// --- Démarre Docker selon l'OS
+async function startDocker() {
+	if (process.platform === "win32") {
+		const dockerPath = `"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"`
+		exec(`start "" ${dockerPath}`)
+	} else if (process.platform === "darwin") {
+		exec(`open -a Docker`)
+	} else {
+		exec(`sudo systemctl start docker`)
+	}
+	return new Promise((resolve) => setTimeout(resolve, 5000)) // laisse le temps à Docker de démarrer
+}
+
+// --- Handlers principaux
+export function registerDockerHandlers() {
+	// Vérifier / démarrer Docker
+	ipcMain.handle("check-docker", async () => {
+		let status = await checkDockerStatus()
+
+		// Tentative de démarrage si Docker est installé mais éteint
+		if (status.installed && !status.running) {
+			console.log("[dockerInstaller] Docker trouvé mais arrêté → démarrage...")
+			await startDocker()
+			status = await checkDockerStatus()
+		}
+
+		return status
+	})
+
+	// Installation complète de Docker (comme avant)
 	ipcMain.handle("install-docker", async (e) => {
 		const platform = process.platform
 		const win = BrowserWindow.fromWebContents(e.sender)
@@ -44,7 +79,7 @@ export function registerDockerHandlers() {
 	})
 }
 
-// --- Helpers OS -----
+// --- Installateurs OS -----
 
 function installDockerWindows() {
 	return new Promise((resolve) => {
@@ -109,6 +144,8 @@ function installDockerDebian() {
 	`
 	return runScript(script, "bash", "debian")
 }
+
+// --- Helpers internes ---
 
 function runScript(script, shell, label) {
 	return new Promise((resolve) => {

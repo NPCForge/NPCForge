@@ -33,10 +33,36 @@ const api = {
 		assertString("page", page)
 		return ipcRenderer.invoke("navigate", page)
 	},
+
+	// Docker / Releases
 	checkDocker: () => ipcRenderer.invoke("check-docker"),
 	installDocker: () => ipcRenderer.invoke("install-docker"),
-	apiDownloadLatest: () => ipcRenderer.invoke("api:download-latest"),
-	apiComposeUp:    () => ipcRenderer.invoke("api:compose-up"),
+	startDocker: () => ipcRenderer.invoke("start-docker"),
+
+	// Accepte des options ex: { force:true }
+	apiDownloadLatest: (opts = {}) => ipcRenderer.invoke("api:download-latest", opts),
+	apiComposeUp: () => ipcRenderer.invoke("api:compose-up"),
+
+	gameDownload: () => ipcRenderer.invoke("game:download"),
+	gameRun: () => ipcRenderer.invoke("game:run"),
+
+	// ENV keystore (main)
+	setEnv: (kv) => ipcRenderer.invoke("env:set", kv),
+	getEnv: (key) => ipcRenderer.invoke("env:get", key),
+	hasEnvKey: async (key) => {
+		const val = await ipcRenderer.invoke("env:get", key)
+		return !!val
+	},
+
+	// Progress events (download…)
+	onProgress(cb) {
+		if (typeof cb !== "function") throw new TypeError("[preload] onProgress: cb doit être une fonction")
+		const listener = (_e, payload) => cb(payload)
+		ipcRenderer.on("installer:progress", listener)
+		return () => ipcRenderer.removeListener("installer:progress", listener)
+	},
+
+	// Event bus générique (optionnel)
 	on(event, handler) {
 		const allowed = new Set(["progress", "log", "error"])
 		if (!allowed.has(event)) throw new Error(`[preload] Event non autorisé: ${event}`)
