@@ -212,4 +212,3 @@ Inspiré par une idée simple : *“Installer, configurer, jouer.”*
 > 🦊 *PakeTekos inside.*
 
 
-Souhaites-tu que je te génère aussi le **squelette du projet Electron** (avec `main.js`, `preload.js`, UI de saisie de clé GPT, gestion du téléchargement + extraction auto depuis GitHub) pour que ce README corresponde directement à ton code ?
