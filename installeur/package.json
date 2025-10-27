@@ -8,10 +8,17 @@
 		"dist:win": "electron-builder --win nsis"
 	},
 	"build": {
-		"appId": "com.yourorg.projectlauncher",
-		"files": ["main.js","preload.js","index.html"],
+		"appId": "npcforge.fr",
+		"files": [
+			"*.{js,cjs,html}",
+			"scripts/**",
+			"package.json"
+		],
 		"extraResources": [
-			{ "from": "scripts/install-linux.sh", "to": "scripts/install-linux.sh" }
+			{
+				"from": "scripts/install-linux.sh",
+				"to": "scripts/install-linux.sh"
+			}
 		],
 		"nsis": {
 			"oneClick": true,
@@ -21,10 +28,15 @@
 		}
 	},
 	"dependencies": {
-		"electron": "^32.0.0",
 		"sudo-prompt": "^9.2.1"
 	},
 	"devDependencies": {
-		"electron-builder": "^24.13.3"
-	}
+		"electron": "^38.4.0",
+		"electron-builder": "^24.13.3",
+		"keytar": "^7.9.0"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"description": ""
 }
