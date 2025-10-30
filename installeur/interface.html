@@ -209,25 +209,31 @@
 			try{
 				const c = await window.launcher.checkDocker()
 				if(c?.installed){
-					setBar(s1.bar,100,false,false); setStatus(s1.status,`Docker OK (${c.version})`,"text-success")
+					setBar(s1.bar,100,false,false); setStatus(s1.status,`Docker OK (${c.version||'détecté'})`,"text-success")
 					return true
 				}
 				log(s1.log, `<span class="text-warning">•</span> Absent: ${c?.error||"non détecté"}`)
 			}catch(e){ log(s1.log, `<span class="text-danger">✖</span> ${e?.message||e}`)}
 
 			setStatus(s1.status,"Installation Docker…","text-warning"); setBar(s1.bar,40,true,true)
-			await window.launcher.installDocker().catch(e=>log(s1.log, `<span class="text-danger">✖</span> ${e?.message||e}`))
-			setStatus(s1.status,"Attente que Docker soit prêt…","text-warning"); setBar(s1.bar,60,true,true)
+			const res = await window.launcher.installDocker().catch(e=>({ started:false, error:e?.message||String(e) }))
+			if (!res?.started) {
+				setStatus(s1.status,"Échec installation","text-danger"); setBar(s1.bar,90,false,true)
+				log(s1.log, `<span class="text-danger">✖</span> ${res?.error||"install failed"}`)
+				return false
+			}
 
+			setStatus(s1.status,"Démarrage/initialisation…","text-warning"); setBar(s1.bar,60,true,true)
 			for(let i=0;i<120;i++){
 				await sleep(5000)
 				try{
 					const c=await window.launcher.checkDocker()
-					if(c?.installed){ setBar(s1.bar,100,false,false); setStatus(s1.status,`Docker prêt (${c.version})`,"text-success"); return true }
+					if(c?.installed){ setBar(s1.bar,100,false,false); setStatus(s1.status,`Docker prêt (${c.version||'ok'})`,"text-success"); return true }
 				}catch{}
 			}
 			setStatus(s1.status,"Timeout Docker","text-danger"); setBar(s1.bar,95,false,true); return false
 		}
+
 
 		async function hasApiKey(){
 			try{

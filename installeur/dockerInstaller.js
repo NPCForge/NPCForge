@@ -8,16 +8,22 @@ import fs from "fs"
 // --- Vérifie si docker est installé + lancé
 async function checkDockerStatus() {
 	return new Promise((resolve) => {
-		exec("docker info", (err, stdout, stderr) => {
+		exec("docker --version", (err, vStdout, vStderr) => {
 			if (err) {
-				// Cas 1 : Docker non installé
-				if (stderr.includes("not found") || err.message.includes("not recognized")) {
-					return resolve({ installed: false, running: false })
+				const msg = ((vStderr || "") + " " + (err.message || "")).toLowerCase()
+				if (err.code === "ENOENT" || /not recognized|not found|no such file/i.test(msg)) {
+					return resolve({ installed: false, running: false, error: (vStderr || err.message || "").trim() })
 				}
-				// Cas 2 : installé mais daemon arrêté
-				return resolve({ installed: true, running: false })
+				// La commande existe peut-être mais renvoie une autre erreur
+				// On considère "non installé" si on ne trouve pas la version
+				return resolve({ installed: false, running: false, error: (vStderr || err.message || "").trim() })
 			}
-			resolve({ installed: true, running: true, info: stdout.trim() })
+
+			const version = (vStdout || "").match(/version\s+([\w.\-+]+)/i)?.[1] || (vStdout || "").trim() || null
+			exec("docker info", (err2, stdout2) => {
+				if (err2) return resolve({ installed: true, running: false, version })
+				return resolve({ installed: true, running: true, version, info: (stdout2 || "").trim() })
+			})
 		})
 	})
 }
@@ -25,14 +31,16 @@ async function checkDockerStatus() {
 // --- Démarre Docker selon l'OS
 async function startDocker() {
 	if (process.platform === "win32") {
-		const dockerPath = `"C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"`
-		exec(`start "" ${dockerPath}`)
+		exec(`start "" "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"`)
 	} else if (process.platform === "darwin") {
 		exec(`open -a Docker`)
 	} else {
-		exec(`sudo systemctl start docker`)
+		// Linux
+		exec(`which pkexec >/dev/null 2>&1 && pkexec systemctl start docker || sudo -n systemctl start docker`, (e) => {
+			if (e) console.warn("[dockerInstaller] start docker needs elevation, run manually: sudo systemctl start docker")
+		})
 	}
-	return new Promise((resolve) => setTimeout(resolve, 5000)) // laisse le temps à Docker de démarrer
+	return new Promise((resolve) => setTimeout(resolve, 8000))
 }
 
 // --- Handlers principaux
@@ -87,19 +95,24 @@ function installDockerWindows() {
 		const installer = path.join(tmp, "DockerDesktopInstaller.exe")
 		const url = "https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe"
 
-		const ps = [
-			`$ProgressPreference='SilentlyContinue';`,
-			`Invoke-WebRequest -UseBasicParsing -Uri "${url}" -OutFile "${installer}"`
-		].join(" ")
+		const dl = `powershell -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; try { Invoke-WebRequest -UseBasicParsing -Uri '${url}' -OutFile '${installer}' } catch { exit 87 }"`
+		exec(dl, (err) => {
+			if (err) {
+				// Fallback WINGET si disponible
+				const winget = `powershell -NoProfile -Command "winget install -e --id Docker.DockerDesktop --accept-package-agreements --accept-source-agreements"`
+				return exec(winget, (e2, so2, se2) => {
+					if (e2) return resolve({ started: false, error: "winget-install-failed: " + (se2 || e2.message) })
+					return resolve({ started: true, result: so2?.trim(), note: "winget-install" })
+				})
+			}
 
-		exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${ps}"`, (err) => {
-			if (err) return resolve({ started: false, error: "download-failed: " + err.message })
-
-			const args = ["install", "--quiet", "--accept-license"]
-			const cmd = `Start-Process -FilePath "${installer}" -ArgumentList "${args.join(" ")}" -Verb RunAs -Wait; echo done`
-			exec(`powershell -NoProfile -ExecutionPolicy Bypass -Command "${cmd}"`, (err2, stdout) => {
-				if (err2) return resolve({ started: false, error: "install-failed: " + err2.message })
-				resolve({ started: true, result: (stdout || "").trim() })
+			const cmd = `powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Process -FilePath '${installer}' -ArgumentList 'install --quiet --accept-license' -Verb RunAs -Wait -PassThru | Format-List *"`
+			exec(cmd, (err2, stdout2, stderr2) => {
+				if (err2) return resolve({ started: false, error: "install-failed: " + (stderr2 || err2.message) })
+				// Post-install: tenter de démarrer Docker Desktop
+				exec(`start "" "C:\\Program Files\\Docker\\Docker\\Docker Desktop.exe"`, () => {
+					resolve({ started: true, result: (stdout2 || "").trim(), note: "installer-run" })
+				})
 			})
 		})
 	})
