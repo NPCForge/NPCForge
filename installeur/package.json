@@ -1,39 +1,48 @@
 {
 	"name": "project-launcher",
 	"version": "0.1.0",
-	"main": "main.js",
+	"main": "src/main/main.js",
 	"type": "module",
 	"scripts": {
 		"start": "electron .",
-		"dist:win": "electron-builder --win nsis"
+		"dev": "concurrently \"vite\" \"electron .\"",
+		"build": "vite build",
+		"dist:win": "npm run build && electron-builder --win nsis",
+		"package": "npm run build && electron-builder --win nsis"
 	},
 	"build": {
 		"appId": "npcforge.fr",
+		"productName": "NPCForge",
+		"icon": "assets/Logo_enclume.ico",
+		"directories": {
+			"output": "build"
+		},
 		"files": [
-			"*.{js,cjs,html}",
-			"scripts/**",
+			"src/**/*",
+			"dist/**/*",
+			"assets/**/*",
 			"package.json"
-		],
-		"extraResources": [
-			{
-				"from": "scripts/install-linux.sh",
-				"to": "scripts/install-linux.sh"
-			}
 		],
 		"nsis": {
 			"oneClick": true,
 			"perMachine": true,
 			"allowElevation": true,
-			"allowToChangeInstallationDirectory": false
+			"allowToChangeInstallationDirectory": false,
+			"installerIcon": "assets/Logo_enclume.ico",
+			"uninstallerIcon": "assets/Logo_enclume.ico"
 		}
 	},
 	"dependencies": {
-		"sudo-prompt": "^9.2.1"
+		"sudo-prompt": "^9.2.1",
+		"vue": "^3.5.25"
 	},
 	"devDependencies": {
+		"@vitejs/plugin-vue": "^6.0.2",
+		"concurrently": "^8.2.2",
 		"electron": "^38.4.0",
 		"electron-builder": "^24.13.3",
-		"keytar": "^7.9.0"
+		"keytar": "^7.9.0",
+		"vite": "^7.2.7"
 	},
 	"keywords": [],
 	"author": "",

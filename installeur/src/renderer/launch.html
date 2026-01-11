@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fr">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>NPCForge — Launcher</title>
+	<meta http-equiv="Content-Security-Policy"
+		  content="default-src 'self' https://cdn.jsdelivr.net;
+				   script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
+				   style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';
+				   img-src 'self' data:;">
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-dark text-light">
+	<div class="container py-4" style="max-width:800px;">
+		<h1 class="mb-3">🎮 NPCForge — Launcher</h1>
+
+		<div class="mb-3">
+			<div class="small text-secondary">État clé GPT :</div>
+			<div id="key-state" class="badge bg-secondary">Vérification…</div>
+		</div>
+
+		<div class="d-flex flex-wrap gap-2 mb-4">
+			<button id="btn-api-up" class="btn btn-success">API: docker compose up -d</button>
+			<button id="btn-game-run" class="btn btn-primary">Lancer le Jeu</button>
+			<button id="btn-back" class="btn btn-outline-light">← Installation</button>
+		</div>
+
+		<div class="d-flex flex-wrap gap-2 mb-4">
+			<button id="btn-reset" class="btn btn-danger">🗑️ Tout Réinitialiser</button>
+			<button id="btn-refresh" class="btn btn-outline-secondary ms-auto">Actualiser</button>
+		</div>
+
+		<pre id="log" class="bg-black p-3" style="min-height:240px;border:1px solid #333; white-space:pre-wrap;"></pre>
+	</div>
+
+	<script>
+		const logEl = document.getElementById("log")
+		const log = (m)=> { logEl.textContent += (m + "\n") }
+
+		async function refreshKeyState() {
+			try {
+				const key = await window.launcher.getEnv("CHATGPT_TOKEN")
+				const badge = document.getElementById("key-state")
+				if (key) {
+					const masked = key.length > 8 ? (key.slice(0,4) + "••••••••" + key.slice(-4)) : "••••"
+					badge.className = "badge bg-success"
+					badge.textContent = `Clé détectée: ${masked}`
+				} else {
+					badge.className = "badge bg-warning text-dark"
+					badge.textContent = "Clé absente — retournez sur Installation pour l'ajouter"
+				}
+			} catch (e) {
+				const badge = document.getElementById("key-state")
+				badge.className = "badge bg-danger"
+				badge.textContent = "Erreur de lecture"
+				log("[error] " + (e?.message || e))
+			}
+		}
+
+		document.getElementById("btn-api-up").onclick = async () => {
+			const r = await window.launcher.apiComposeUp()
+			log("== docker compose up ==")
+			log(JSON.stringify(r, null, 2))
+		}
+
+		document.getElementById("btn-game-run").onclick = async () => {
+			const r = await window.launcher.gameRun()
+			log("== run game ==")
+			log(JSON.stringify(r, null, 2))
+		}
+
+		document.getElementById("btn-back").onclick = () => window.launcher.navigate("interface")
+		document.getElementById("btn-refresh").onclick = () => refreshKeyState()
+
+		document.getElementById("btn-reset").onclick = async () => {
+			if (!confirm("⚠️ ATTENTION: Cette action va exécuter:\n\n1. docker compose down -v --rmi all --remove-orphans\n   (Arrête tous les conteneurs, supprime volumes, images et orphelins)\n\n2. Supprimer le dossier API et son cache\n\n3. Supprimer le dossier du jeu et son cache\n\nVoulez-vous vraiment continuer ?")) {
+				return
+			}
+
+			log("\n=== RÉINITIALISATION COMPLÈTE ===")
+			
+			try {
+				// 1. Arrêter docker compose
+				log("→ Arrêt de Docker Compose...")
+				const downResult = await window.launcher.apiComposeDown()
+				log(JSON.stringify(downResult, null, 2))
+
+				// 2. Nettoyer l'API
+				log("\n→ Suppression de l'API...")
+				const apiCleanResult = await window.launcher.apiCleanup()
+				log(JSON.stringify(apiCleanResult, null, 2))
+
+				// 3. Nettoyer le jeu
+				log("\n→ Suppression du jeu...")
+				const gameCleanResult = await window.launcher.gameCleanup()
+				log(JSON.stringify(gameCleanResult, null, 2))
+
+				log("\n✅ RÉINITIALISATION TERMINÉE")
+				log("Vous pouvez maintenant retourner à l'installation et tout réinstaller.")
+				
+				// Refresh l'état de la clé
+				await refreshKeyState()
+			} catch (err) {
+				log(`\n❌ ERREUR: ${err.message}`)
+				console.error(err)
+			}
+		}
+
+		// init
+		refreshKeyState()
+	</script>
+</body>
+</html>
